@@ -1,20 +1,29 @@
 pipeline {
-  agent any
+  agent {
+    docker {
+      image 'docker:27-cli'
+      args '-v /var/run/docker.sock:/var/run/docker.sock'
+    }
+  }
 
   environment {
     IMAGE_NAME = "aliffessor/ci-cd-jenkins"
+    CONTAINER_NAME = "mypyapp"
   }
 
   stages {
     stage('Checkout') {
       steps {
-        git branch: 'main', url: 'https://github.com/AliFMDR/ci-cd-jenkins.git'
+        checkout scm
       }
     }
 
     stage('Build Docker Image') {
       steps {
-        sh 'docker build -t $IMAGE_NAME:latest .'
+        sh '''
+          docker version
+          docker build -t $IMAGE_NAME:latest .
+        '''
       }
     }
 
@@ -26,7 +35,7 @@ pipeline {
           passwordVariable: 'DOCKER_PASS'
         )]) {
           sh '''
-            echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
             docker push $IMAGE_NAME:latest
           '''
         }
@@ -36,11 +45,23 @@ pipeline {
     stage('Deploy') {
       steps {
         sh '''
-          docker stop mypyapp || true
-          docker rm mypyapp || true
-          docker run -d -p 80:5000 --name mypyapp $IMAGE_NAME:latest
+          docker stop $CONTAINER_NAME || true
+          docker rm $CONTAINER_NAME || true
+          docker run -d -p 80:5000 --name $CONTAINER_NAME $IMAGE_NAME:latest
         '''
       }
+    }
+  }
+
+  post {
+    always {
+      sh 'docker logout || true'
+    }
+    success {
+      echo "CI/CD pipeline sukses: image ke-push & app ke-deploy 🎉"
+    }
+    failure {
+      echo "Pipeline gagal. Cek Console Output buat detail error."
     }
   }
 }
