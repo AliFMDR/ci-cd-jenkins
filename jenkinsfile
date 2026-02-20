@@ -1,0 +1,46 @@
+pipeline {
+  agent any
+
+  environment {
+    IMAGE_NAME = "aliffessor/ci-cd-jenkins"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        git branch: 'main', url: 'https://github.com/AliFMDR/ci-cd-jenkins.git'
+      }
+    }
+
+    stage('Build Docker Image') {
+      steps {
+        sh 'docker build -t $IMAGE_NAME:latest .'
+      }
+    }
+
+    stage('Push Image') {
+      steps {
+        withCredentials([usernamePassword(
+          credentialsId: 'dockerhub-creds',
+          usernameVariable: 'DOCKER_USER',
+          passwordVariable: 'DOCKER_PASS'
+        )]) {
+          sh '''
+            echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+            docker push $IMAGE_NAME:latest
+          '''
+        }
+      }
+    }
+
+    stage('Deploy') {
+      steps {
+        sh '''
+          docker stop mypyapp || true
+          docker rm mypyapp || true
+          docker run -d -p 80:5000 --name mypyapp $IMAGE_NAME:latest
+        '''
+      }
+    }
+  }
+}
